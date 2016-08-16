@@ -23,59 +23,24 @@ int main(){
 	Mat gray;
 
 	
-	
 	CascadeClassifier classifier ;
 	classifier.load("C:\\Users\\WLK\\Pictures\\data\\cascade.xml");
 	vector<Rect> objects;
+	
 	
 ///////////////////////K-MEAN///init///////////////////////////
 	//Mat  model = imread("d:\\newmodel.jpg");
 
 //////////////////手掌的样本在开始的时候进行获取，，让用户把手掌放在窗口的指定位置;
-	Mat temp;
-	 time_t mtime;
-	 time_t old_time;
-	 time(&old_time);
-	 int backcount = 10;
-	 char str[4];
-	 Rect captureRect(Point(190,110),Point(290,210));
-	
-	 
-	 while(true){
-		vc>>temp;
-		resize(temp,temp,Size(480,320));
-		rectangle(temp,captureRect,Scalar(100,200,45),3);
-		putText(temp,"please put you hand below",Point(100,80),0,0.8,Scalar(0,0,100),1);
-		sprintf(str,"%d",backcount);
-		putText(temp,str,Point(50,40),0,1.2,Scalar(100,100,0),5);
-		waitKey(10);
-		time(&mtime);
-		if(mtime>old_time){
-			backcount--;
-			old_time = mtime;
-			if(backcount<0)
-				break;
-		}
-		imshow("show you hand,please!",temp);
+	Rect captureRect(Point(190,110),Point(290,210));
+	Mat *temp  = createModel(vc,captureRect);
+	Mat  model = (*temp)(captureRect);
 
-	}
-
-	Mat  model = temp(captureRect);
 	//resize(model,model,Size(480,320));
 	imshow("model:",model);
 	waitKey(1000);
 	destroyAllWindows();
-/////////////////////////////////////////////////////////////
-
-	
-	mixChannels(&hsv_pic,1,&hue_image,1,ch,1);
-	static	MatND hist;
-	int histSize = 5;
-	float hue_range[] = {0,180};
-	const float * ranges = {hue_range};
-	calcHist(&hue_image,1,0,Mat(),hist,1,&histSize,&ranges,true,false);
-	normalize(hist,hist,0,255,NORM_MINMAX,-1,Mat());
-	//////////////////创建一个trackbar
+//////////////////////////创建一个trackbar
 	namedWindow("button");
 	int minSize=30,
 		maxSize = 120,
@@ -114,11 +79,9 @@ int main(){
 
 			printf("\n");
 ////////////////////////k-mean///////////////////////
-			
+			static	Point* resultPoints = new Point[5];
 			utils.run_k_means(points,n,resultPoints,4);///////////KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKMMMMMMEEEEEEAAAAAAAAANNNNNNNNNSSS
-
 			static Mat finalResult;
-
 			finalResult = Mat(cur.rows,cur.cols,CV_8UC3);
 
 			circle(threResult,resultPoints[0],20,Scalar(255,255,255),5);
@@ -136,12 +99,6 @@ int main(){
 ////////////////k-mean//////////////////////////
 		Mat toshowImage2;
 		resize(srcImg,toshowImage2,Size(toshowImage.cols,toshowImage.rows));
-
-
-
-
-
-
 		
 ///////////k-mean and harracascade//////////////
 		for(int x = 0;x<objects.size();x++){
@@ -160,8 +117,6 @@ int main(){
 		imshow("xxxresult:",toshowImage2);
 
 
-////////////////////////////////////////////////
-
 	waitKey(10);
 	}
 	
@@ -170,3 +125,36 @@ int main(){
 
 
 
+
+
+Mat*  createModel(VideoCapture vc,Rect captureRect){
+	Mat *temp= new Mat();
+	time_t mtime;
+	time_t old_time;
+	time(&old_time);
+	int backcount = 10;
+	char str[4];
+	
+
+
+	while(true){
+		vc>>*temp;
+		resize(*temp,*temp,Size(480,320));
+		rectangle(*temp,captureRect,Scalar(100,200,45),3);
+		putText(*temp,"please put you hand below",Point(100,80),0,0.8,Scalar(0,0,100),1);
+		sprintf(str,"%d",backcount);
+		putText(*temp,str,Point(50,40),0,1.2,Scalar(100,100,0),5);
+		waitKey(10);
+		time(&mtime);
+		if(mtime>old_time){
+			backcount--;
+			old_time = mtime;
+			if(backcount<0)
+				break;
+		}
+		imshow("show you hand,please!",*temp);
+
+	}
+
+	return temp;
+}
