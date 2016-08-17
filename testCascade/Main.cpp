@@ -5,156 +5,145 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 using namespace std;
 using namespace cv;
 #define debug false
-
-void countPoint(Mat mat,Point *points,int &n,int thresh);
-int diss(Point p1,Point p2);
-
+#define PI 3.1415926
 void track_change(int ,void*){}
+bool isHandPos(Rect picrect,Point point,int ignoreangle);
+
+
 int main(){
-
-	mutils utils;
-
 	VideoCapture vc = VideoCapture(0);
+	mutils myutils;
+	myutils.createModel(vc);//手掌的样本在开始的时候进行获取，，让用户把手掌放在窗口的指定位置;
 	Mat srcImg;
-	
-	Mat gray;
-
 	
 	CascadeClassifier classifier ;
 	classifier.load("C:\\Users\\WLK\\Pictures\\data\\cascade.xml");
 	vector<Rect> objects;
 	
+
 	
-///////////////////////K-MEAN///init///////////////////////////
-	//Mat  model = imread("d:\\newmodel.jpg");
 
-//////////////////手掌的样本在开始的时候进行获取，，让用户把手掌放在窗口的指定位置;
-	Rect captureRect(Point(190,110),Point(290,210));
-	Mat *temp  = createModel(vc,captureRect);
-	Mat  model = (*temp)(captureRect);
-
-	//resize(model,model,Size(480,320));
-	imshow("model:",model);
-	waitKey(1000);
-	destroyAllWindows();
-//////////////////////////创建一个trackbar
-	namedWindow("button");
+	namedWindow("button");//////////////////////////创建一个trackbar窗口；
 	int minSize=30,
 		maxSize = 120,
-		minnerghor =22;
-		
+		minnerghor =22;	
 	createTrackbar("mixSize:","button",&minSize,100,track_change);
 	createTrackbar("maxSize:","button",&maxSize,200,track_change);
 	createTrackbar("minnerghor:","button",&minnerghor,100,track_change);
 	track_change(minSize,0);
 	track_change(maxSize,0);
 	track_change(minnerghor,0);
+	static	Point* resultPoints = new Point[5];
 
-	
-///////////////////////K-mean//////////////////////////////
-	
-	
 	while(true){
 		vc>>srcImg;
+		myutils.loadsrcImg(srcImg);
 
-			objects.clear();
-
-
-
+		objects.clear();
+		int scaledWidth = 480;
+		Mat gray;
+		if (srcImg.channels() == 3) {
+			cvtColor(srcImg, gray, CV_BGR2GRAY);
+		}
+		else if (srcImg.channels() == 4) {
+			cvtColor(srcImg, gray, CV_BGRA2GRAY);
+		}
+		else {
+			// Access the input image directly, since it is already grayscale.
+			gray = srcImg;
+		}
+		// Possibly shrink the image, to run much faster.
+		Mat toshowImage;
+		float scale = srcImg.cols / (float)scaledWidth;
+		if (srcImg.cols > scaledWidth) {
+			// Shrink the image while keeping the same aspect ratio.
+			int scaledHeight = cvRound(srcImg.rows / scale);
+			resize(gray, toshowImage, Size(scaledWidth, scaledHeight));
+		}
+		else {
+			// Access the input image directly, since it is already small.
+			toshowImage = gray;
+		}
+		// Standardize the brightness and contrast to improve dark images.
+		Mat equalizedImg;
+		equalizeHist(toshowImage, equalizedImg);
 		classifier.detectMultiScale(equalizedImg,objects,1.1f,minnerghor,0,Size(minSize,minSize),Size(maxSize,maxSize));
 		printf("\nminSize is:%d\nmaxSize id:%d\n\n",minSize,maxSize);
-
-
+		
 		vector<Rect>::iterator begin = objects.begin();
 		vector<Rect>::iterator end = objects.end();
 			while(begin != end){
-		
 				rectangle(toshowImage,*begin,Scalar(0,225,255),5);
 				printf("draw a rect\n");
 				begin++;
 			}
-
 			printf("\n");
-////////////////////////k-mean///////////////////////
-			static	Point* resultPoints = new Point[5];
-			utils.run_k_means(points,n,resultPoints,4);///////////KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKMMMMMMEEEEEEAAAAAAAAANNNNNNNNNSSS
-			static Mat finalResult;
-			finalResult = Mat(cur.rows,cur.cols,CV_8UC3);
 
-			circle(threResult,resultPoints[0],20,Scalar(255,255,255),5);
-			circle(threResult,resultPoints[1],20,Scalar(255,255,255),5);
-			circle(threResult,resultPoints[2],20,Scalar(255,255,255),5);
-			circle(threResult,resultPoints[3],20,Scalar(255,255,255),5);
-			imshow("erode",threResult);
-			line(toshowImage,resultPoints[1],resultPoints[2],Scalar(0,0,255));
-			line(toshowImage,resultPoints[2],resultPoints[3],Scalar(0,0,255));
-			line(toshowImage,resultPoints[3],resultPoints[4],Scalar(0,0,255));
-			line(toshowImage,resultPoints[4],resultPoints[1],Scalar(0,0,255));
-			imshow("finalResult",toshowImage);
-		
-	
-////////////////k-mean//////////////////////////
-		Mat toshowImage2;
-		resize(srcImg,toshowImage2,Size(toshowImage.cols,toshowImage.rows));
-		
-///////////k-mean and harracascade//////////////
+		myutils.run_k_means(resultPoints);///////////KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKMMMMMMEEEEEEAAAAAAAAANNNNNNNNNSSS
+		myutils.drawKMeansResult(toshowImage,resultPoints);
+		imshow("finalResult",toshowImage);
+
+		Mat finalresult;
+		resize(srcImg,finalresult,Size(toshowImage.cols,toshowImage.rows));
+		int ignoreangle = 60;
+		Rect picrect(Point(0,0),Point(finalresult.cols,finalresult.rows));
+
 		for(int x = 0;x<objects.size();x++){
 			for(int q = 0;q<4;q++){
 				Point center;
 				center.x = objects[x].x+objects[x].width/2;
 				center.y = objects[x].y-objects[x].height/2;
-				if(sqrt(diss(center,resultPoints[q])) < 20){
-					circle(toshowImage2,resultPoints[q],30,Scalar(255,100,200),3);
-
+				if(sqrt(myutils.diss(center,resultPoints[q])) < 20 && isHandPos(picrect,resultPoints[q],ignoreangle)){
+					circle(finalresult,resultPoints[q],30,Scalar(255,100,200),3);
 				}
-
 			}
-
 		}
-		imshow("xxxresult:",toshowImage2);
+		{
+	
+		line(finalresult,Point(finalresult.cols/2,finalresult.rows*0.4),
+				Point(finalresult.cols/2,finalresult.rows*0.6),Scalar(100,100,0),3);
 
+		line(finalresult,Point(finalresult.cols/2,finalresult.rows*0.4),
+			Point(finalresult.cols/2-finalresult.rows*0.4*tan(ignoreangle*PI/180),0),Scalar(100,100,0),3);
+		line(finalresult,Point(finalresult.cols/2,finalresult.rows*0.4),
+			Point(finalresult.cols/2+finalresult.rows*0.4*tan(ignoreangle*PI/180),0),Scalar(100,100,0),3);
 
+		line(finalresult,Point(finalresult.cols/2,finalresult.rows*0.6),
+			Point(finalresult.cols/2-finalresult.rows*0.4*tan(ignoreangle*PI/180),finalresult.rows),Scalar(100,100,0),3);
+		line(finalresult,Point(finalresult.cols/2,finalresult.rows*0.6),
+			Point(finalresult.cols/2+finalresult.rows*0.4*tan(ignoreangle*PI/180),finalresult.rows),Scalar(100,100,0),3);
+		}
+
+		imshow("show hand position:",finalresult);
 	waitKey(10);
 	}
-	
 	return 0;
 }
 
-
-
-
-
-Mat*  createModel(VideoCapture vc,Rect captureRect){
-	Mat *temp= new Mat();
-	time_t mtime;
-	time_t old_time;
-	time(&old_time);
-	int backcount = 10;
-	char str[4];
+bool isHandPos(Rect picrect,Point point,int ignoreangle){
 	
-
-
-	while(true){
-		vc>>*temp;
-		resize(*temp,*temp,Size(480,320));
-		rectangle(*temp,captureRect,Scalar(100,200,45),3);
-		putText(*temp,"please put you hand below",Point(100,80),0,0.8,Scalar(0,0,100),1);
-		sprintf(str,"%d",backcount);
-		putText(*temp,str,Point(50,40),0,1.2,Scalar(100,100,0),5);
-		waitKey(10);
-		time(&mtime);
-		if(mtime>old_time){
-			backcount--;
-			old_time = mtime;
-			if(backcount<0)
-				break;
+	float a,b;
+	int angle;
+	
+	
+		if(point.y < picrect.height/2){
+			a = abs(point.x -picrect.width/2);
+			b = abs(picrect.height*0.4 - point.y);
+		}else{
+			a = abs(point.x - picrect.width/2);
+			b = abs(point.y - picrect.height*0.6);
 		}
-		imshow("show you hand,please!",*temp);
 
-	}
+		angle = (atan(a/b))*180/PI;
+		printf("%d %d\n",point.x,point.y);
+		printf("edge angle is %d----------angle is %d\n",ignoreangle,angle);
 
-	return temp;
+
+		if(angle > ignoreangle)
+			return true;
+		else return false;
 }

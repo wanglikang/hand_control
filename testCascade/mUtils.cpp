@@ -1,18 +1,21 @@
 #include "mUtils.h"
-
-
+#include <ctime>
+using namespace cv;
+using namespace std;
 mutils::mutils(void)
 {
-
+	
+	mpoints = new Point[1000000];
 	
 }
 
-
 mutils::~mutils(void)
 {
+
 }
 
-void mutils::run_k_means(Point *points,int points_num,Point* resultPoint,int k){
+
+void mutils::k_means(Point *points,int points_num,Point* resultPoint,int k){
 	//初始化多个聚类中心;
 	//4个聚类中心
 	static Point
@@ -21,7 +24,7 @@ void mutils::run_k_means(Point *points,int points_num,Point* resultPoint,int k){
 	centerPoints = (Point*)malloc(sizeof(Point)*(k+1));
 	old_centers = (Point*)malloc(sizeof(Point)*(k+1));
 	//初始化聚类中心
-	for(int q = 1;q<=k;q++){
+	for(int q = 0;q<k;q++){
 		centerPoints[q] = points[points_num/k*q];
 	}
 
@@ -80,11 +83,11 @@ void mutils::run_k_means(Point *points,int points_num,Point* resultPoint,int k){
 		dis[3] > 10 || dis[4] > 10);
 
 	//返回统计到的聚类中心至resultPoints数组中
-	for(int x = 1;x<=k;x++)
+	for(int x = 0;x<k;x++)
 		resultPoint[x] = centerPoints[x];
 }
 
-void mutils::countPoint(Mat mat,Point *points,int &n,int thresh){
+void mutils::countPoint(Mat mat,int &n,int thresh){
 	n = 0;
 	int rows = mat.rows;
 	int cols = mat.cols;
@@ -92,7 +95,7 @@ void mutils::countPoint(Mat mat,Point *points,int &n,int thresh){
 		uchar* ptr = mat.ptr<uchar>(q);
 		for(int p = 0;p<cols;p++){
 			if(ptr[p]>thresh){
-				points[n] = Point(p,q);
+				mpoints[n] = Point(p,q);
 				n++;
 			}
 		}
@@ -103,86 +106,84 @@ int mutils::diss(Point p1,Point p2){
 	return (p1.x-p2.x)^2+(p1.y-p2.y)^2;
 }
 
-void mutils::loadMat(Mat srcImg){
-	Mat equalizedImg;
+void mutils::run_k_means(Point *resultPoints){
+
 
 	cvtColor(model,hsv_pic,COLOR_RGB2HSV);
-
 	hue_image.create(model.size(),model.depth());
-	float scaledWidth = 500;
-
-	Mat gray;
-	if (srcImg.channels() == 3) {
-		cvtColor(srcImg, gray, CV_BGR2GRAY);
-	}
-	else if (srcImg.channels() == 4) {
-		cvtColor(srcImg, gray, CV_BGRA2GRAY);
-	}
-	else {
-		// Access the input image directly, since it is already grayscale.
-		gray = srcImg;
-	}
-
-	// Possibly shrink the image, to run much faster.
-	Mat toshowImage;
-	float scale = srcImg.cols / (float)scaledWidth;
-	if (srcImg.cols > scaledWidth) {
-		// Shrink the image while keeping the same aspect ratio.
-		int scaledHeight = cvRound(srcImg.rows / scale);
-		resize(gray, toshowImage, Size(scaledWidth, scaledHeight));
-	}
-	else {
-		// Access the input image directly, since it is already small.
-		toshowImage = gray;
-	}
-
-	// Standardize the brightness and contrast to improve dark images.
-	Mat equalizedImg;
-	equalizeHist(toshowImage, equalizedImg);
-
 	int ch[] = {0,0};
-
-	static	Mat cur;
-	static	Mat hsv_pic;
-	static	Mat dst;
-	static	Mat hue_image;
-
-	static Mat cur;
-	static Mat toshowImage;
-	resize(srcImg,cur,Size(toshowImage.cols,toshowImage.rows));
-	static	Mat cur_hue;
-	static	Mat cur_hsv;
-	cvtColor(cur,cur_hsv,COLOR_RGB2HSV);
-	cur_hue.create(cur_hsv.size(),cur_hsv.depth());
-	mixChannels(&cur_hsv,1,&cur_hue,1,ch,1);
-
 	mixChannels(&hsv_pic,1,&hue_image,1,ch,1);
-	static	MatND hist;
 	int histSize = 5;
 	float hue_range[] = {0,180};
 	const float * ranges = {hue_range};
 	calcHist(&hue_image,1,0,Mat(),hist,1,&histSize,&ranges,true,false);
 	normalize(hist,hist,0,255,NORM_MINMAX,-1,Mat());
-
-	static	MatND backproj;
+	resize(srcImg,cur,Size(480,320));
+	cvtColor(cur,cur_hsv,COLOR_RGB2HSV);
+	cur_hue.create(cur_hsv.size(),cur_hsv.depth());
+	mixChannels(&cur_hsv,1,&cur_hue,1,ch,1);
 	calcBackProject(&cur_hue,1,0,hist,backproj,&ranges,1,true);
-	
-	static		Mat threResult;
 	threResult = backproj>250;
-	
-
 	erode(threResult,threResult,getStructuringElement(MORPH_RECT,Size(3,3)));
-
-
-	static	Point *points = new Point[1000000];
-	
 	int n  = 0;
-	try{
-		countPoint(threResult,points,n,250);
-	}
-	catch(exception e ){
-		printf("%s",e.what());
-	}
+	countPoint(threResult,n,250);
+	imshow("ecode:",threResult);
 	printf("has %d points",n);
+	k_means(mpoints,n,resultPoints,4);
 
+
+}
+
+void mutils::loadsrcImg(Mat srcImg){
+	this->srcImg = srcImg;
+}
+
+void mutils::createModel(VideoCapture vc){
+	Mat temp;
+	int keycode;
+	time_t mtime;
+	time_t old_time;
+	time(&old_time);
+	int backcount = 10;
+	char str[4];
+	Rect captureRect(Point(190,110),Point(290,210));
+	while(true){
+		vc>>temp;
+		resize(temp,temp,Size(480,320));
+		rectangle(temp,captureRect,Scalar(100,200,45),3);
+		putText(temp,"please put you hand below",Point(100,80),0,0.8,Scalar(0,0,100),1);
+		sprintf(str,"%d",backcount);
+		putText(temp,str,Point(50,40),0,1.2,Scalar(100,100,0),5);
+
+		time(&mtime);
+		if(mtime>old_time){
+			backcount--;
+			old_time = mtime;
+			if(backcount<0)
+				break;
+		}
+		imshow("show you hand,please!",temp);
+		keycode = waitKey(10);
+		if(keycode == ' ')
+			break;
+
+	}
+	model = temp(captureRect);
+	//resize(model,model,Size(480,320));
+	imshow("model:",model);
+	waitKey(1000);
+	destroyAllWindows();	
+}
+
+void mutils::drawKMeansResult(Mat toshowImage,Point *resultPoints){
+	circle(toshowImage,resultPoints[0],20,Scalar(255,255,255),5);
+	circle(toshowImage,resultPoints[1],20,Scalar(255,255,255),5);
+	circle(toshowImage,resultPoints[2],20,Scalar(255,255,255),5);
+	circle(toshowImage,resultPoints[3],20,Scalar(255,255,255),5);
+	
+	line(toshowImage,resultPoints[0],resultPoints[1],Scalar(0,0,255),1);
+	line(toshowImage,resultPoints[1],resultPoints[2],Scalar(0,0,255),1);
+	line(toshowImage,resultPoints[2],resultPoints[3],Scalar(0,0,255),1);
+	line(toshowImage,resultPoints[3],resultPoints[0],Scalar(0,0,255),1);
+	
 }
